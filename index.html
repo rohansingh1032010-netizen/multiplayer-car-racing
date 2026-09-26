@@ -1,184 +1,459 @@
 <!DOCTYPE html>
-<html>
+<html lang="en">
 <head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width,initial-scale=1.0">
 <title>Multiplayer Car Racing</title>
+
+<script src="https://unpkg.com/peerjs@1.5.4/dist/peerjs.min.js"></script>
+
 <style>
-body {
-    margin: 0;
-    overflow: hidden;
-    background: #222;
-    font-family: Arial;
+*{box-sizing:border-box}
+body{
+    margin:0;
+    font-family:Arial,sans-serif;
+    background:#111;
+    color:white;
+    overflow:hidden;
 }
-
-#game {
-    width: 100vw;
-    height: 100vh;
-    background: #555;
-    position: relative;
-    overflow: hidden;
+.screen{
+    width:100vw;
+    height:100vh;
+    display:flex;
+    align-items:center;
+    justify-content:center;
+    flex-direction:column;
+    gap:15px;
 }
-
-.road {
-    position: absolute;
-    width: 320px;
-    height: 100%;
-    left: 50%;
-    transform: translateX(-50%);
-    background: #333;
-    border-left: 8px solid white;
-    border-right: 8px solid white;
+h1{font-size:36px;margin:0 0 15px}
+button,input{
+    padding:14px 20px;
+    border:0;
+    border-radius:10px;
+    font-size:18px;
 }
-
-.line {
-    position: absolute;
-    width: 8px;
-    height: 80px;
-    background: white;
-    left: 50%;
-    transform: translateX(-50%);
+button{
+    cursor:pointer;
+    font-weight:bold;
 }
-
-.car {
-    position: absolute;
-    width: 50px;
-    height: 90px;
-    border-radius: 12px;
-    bottom: 30px;
+input{
+    width:260px;
+    text-align:center;
 }
-
-#player {
-    background: red;
-    left: calc(50% - 25px);
+#roomCode{
+    font-size:24px;
+    font-weight:bold;
+    letter-spacing:3px;
 }
-
-#enemy {
-    background: blue;
-    top: -100px;
-    left: calc(50% - 25px);
+#status{
+    min-height:25px;
+    color:#ffd54f;
 }
-
-#score {
-    position: absolute;
-    top: 15px;
-    left: 15px;
-    color: white;
-    font-size: 25px;
-    z-index: 10;
+#game{
+    display:none;
+    position:relative;
+    width:100vw;
+    height:100vh;
+    background:#176b2c;
+    overflow:hidden;
 }
-
-#start {
-    position: absolute;
-    z-index: 20;
-    top: 50%;
-    left: 50%;
-    transform: translate(-50%, -50%);
-    padding: 15px 30px;
-    font-size: 22px;
-    border: none;
-    border-radius: 10px;
-    cursor: pointer;
+.road{
+    position:absolute;
+    left:50%;
+    transform:translateX(-50%);
+    width:min(420px,90vw);
+    height:100%;
+    background:#333;
+    border-left:8px solid white;
+    border-right:8px solid white;
+}
+.lane{
+    position:absolute;
+    left:50%;
+    width:7px;
+    height:70px;
+    background:white;
+    transform:translateX(-50%);
+}
+.car{
+    position:absolute;
+    width:48px;
+    height:78px;
+    border-radius:12px;
+    z-index:5;
+    box-shadow:0 5px 10px #0008;
+}
+#myCar{
+    background:#ff3030;
+    bottom:80px;
+}
+#enemyCar{
+    background:#2979ff;
+    bottom:200px;
+}
+#hud{
+    position:absolute;
+    top:10px;
+    left:10px;
+    right:10px;
+    z-index:10;
+    display:flex;
+    justify-content:space-between;
+    font-size:18px;
+    font-weight:bold;
+}
+#mobileControls{
+    position:absolute;
+    bottom:20px;
+    left:0;
+    right:0;
+    z-index:20;
+    display:flex;
+    justify-content:center;
+    gap:80px;
+}
+.control{
+    width:75px;
+    height:60px;
+    border-radius:50%;
+    font-size:28px;
+    opacity:.85;
+}
+#result{
+    display:none;
+    position:absolute;
+    inset:0;
+    z-index:50;
+    background:#000b;
+    align-items:center;
+    justify-content:center;
+    flex-direction:column;
 }
 </style>
 </head>
 
 <body>
 
+<div id="menu" class="screen">
+    <h1>🏎️ Car Racing</h1>
+
+    <button onclick="startSolo()">🎮 Play Solo</button>
+
+    <button onclick="createRoom()">👑 Create Room</button>
+
+    <div id="roomCode"></div>
+
+    <input id="joinCode" placeholder="Enter Room Code">
+    <button onclick="joinRoom()">👥 Join Room</button>
+
+    <div id="status"></div>
+</div>
+
 <div id="game">
+
     <div class="road"></div>
 
-    <div id="score">Score: 0</div>
+    <div class="lane" style="top:0"></div>
+    <div class="lane" style="top:150px"></div>
+    <div class="lane" style="top:300px"></div>
+    <div class="lane" style="top:450px"></div>
+    <div class="lane" style="top:600px"></div>
+    <div class="lane" style="top:750px"></div>
 
-    <div id="player" class="car"></div>
-    <div id="enemy" class="car"></div>
+    <div id="hud">
+        <span>🏁 Lap: <span id="lap">1</span>/3</span>
+        <span>🏆 Score: <span id="score">0</span></span>
+    </div>
 
-    <button id="start">START GAME</button>
+    <div id="myCar" class="car"></div>
+    <div id="enemyCar" class="car"></div>
+
+    <div id="mobileControls">
+        <button class="control" id="left">⬅️</button>
+        <button class="control" id="right">➡️</button>
+    </div>
+
+    <div id="result">
+        <h1 id="resultText">🏆 YOU WIN!</h1>
+        <button onclick="location.reload()">Play Again</button>
+    </div>
 </div>
 
 <script>
-const player = document.getElementById("player");
-const enemy = document.getElementById("enemy");
-const scoreText = document.getElementById("score");
-const start = document.getElementById("start");
 
-let playerX;
-let enemyY;
-let score;
-let gameRunning = false;
+let peer=null;
+let connection=null;
+let isHost=false;
+let multiplayer=false;
 
-function startGame() {
-    playerX = window.innerWidth / 2 - 25;
-    enemyY = -100;
-    score = 0;
+let myX=0;
+let enemyX=0;
 
-    player.style.left = playerX + "px";
-    enemy.style.top = enemyY + "px";
+let score=0;
+let lap=1;
+let gameStarted=false;
 
-    scoreText.innerText = "Score: 0";
-    start.style.display = "none";
+const menu=document.getElementById("menu");
+const game=document.getElementById("game");
+const myCar=document.getElementById("myCar");
+const enemyCar=document.getElementById("enemyCar");
+const status=document.getElementById("status");
+const roomCode=document.getElementById("roomCode");
 
-    gameRunning = true;
-    gameLoop();
+function randomRoomCode(){
+    return Math.random().toString(36).substring(2,8).toUpperCase();
 }
 
-function gameLoop() {
-    if (!gameRunning) return;
+/* SOLO */
 
-    enemyY += 6;
-    enemy.style.top = enemyY + "px";
+function startSolo(){
+    multiplayer=false;
+    enemyCar.style.display="none";
+    startGame();
+}
 
-    if (enemyY > window.innerHeight) {
-        enemyY = -100;
-        enemy.style.left =
-            (window.innerWidth / 2 - 160 +
-            Math.random() * 270) + "px";
+/* CREATE ROOM */
 
-        score++;
-        scoreText.innerText = "Score: " + score;
+function createRoom(){
+
+    status.innerText="Creating room...";
+
+    const code=randomRoomCode();
+
+    peer=new Peer("car-race-"+code);
+
+    peer.on("open",function(){
+
+        isHost=true;
+        multiplayer=true;
+
+        roomCode.innerText="ROOM: "+code;
+
+        const link=location.origin+location.pathname+"?room="+code;
+
+        status.innerText="Room created! Share this link with your friend.";
+
+        navigator.clipboard.writeText(link).catch(()=>{});
+
+        roomCode.innerHTML=
+            "ROOM: "+code+
+            "<br><small>Link copied! Send it to your friend.</small>";
+    });
+
+    peer.on("connection",function(conn){
+
+        connection=conn;
+
+        connection.on("open",function(){
+
+            status.innerText="🎉 Friend connected! Starting race...";
+
+            connection.send({
+                type:"start",
+                x:myX
+            });
+
+            setTimeout(startGame,1000);
+        });
+
+        connection.on("data",receiveData);
+    });
+
+    peer.on("error",function(err){
+        status.innerText="Connection error. Try creating the room again.";
+        console.log(err);
+    });
+}
+
+/* JOIN ROOM */
+
+function joinRoom(){
+
+    let code=document.getElementById("joinCode").value.trim().toUpperCase();
+
+    if(!code){
+        status.innerText="Enter a room code.";
+        return;
     }
 
-    let p = player.getBoundingClientRect();
-    let e = enemy.getBoundingClientRect();
+    status.innerText="Joining room...";
 
-    if (
-        p.left < e.right &&
-        p.right > e.left &&
-        p.top < e.bottom &&
-        p.bottom > e.top
-    ) {
-        gameRunning = false;
-        start.innerText = "GAME OVER - PLAY AGAIN";
-        start.style.display = "block";
-        return;
+    peer=new Peer();
+
+    peer.on("open",function(){
+
+        connection=peer.connect("car-race-"+code);
+
+        connection.on("open",function(){
+
+            multiplayer=true;
+            isHost=false;
+
+            status.innerText="🎉 Connected! Starting race...";
+
+            connection.send({
+                type:"start",
+                x:myX
+            });
+
+            setTimeout(startGame,1000);
+        });
+
+        connection.on("data",receiveData);
+
+        connection.on("error",function(){
+            status.innerText="Could not join the room.";
+        });
+    });
+}
+
+/* RECEIVE */
+
+function receiveData(data){
+
+    if(data.type==="position"){
+        enemyX=data.x;
+        updateEnemy();
+    }
+
+    if(data.type==="start"){
+        multiplayer=true;
+        if(!gameStarted) startGame();
+    }
+
+    if(data.type==="score"){
+        score=data.score;
+        lap=data.lap;
+    }
+
+    if(data.type==="finish"){
+        endGame(data.winner ? "🏆 YOU WIN!" : "😅 YOU LOST!");
+    }
+}
+
+/* GAME */
+
+function startGame(){
+
+    if(gameStarted)return;
+
+    gameStarted=true;
+
+    menu.style.display="none";
+    game.style.display="block";
+
+    const center=window.innerWidth/2;
+
+    myX=center-100;
+    enemyX=center+50;
+
+    myCar.style.left=myX+"px";
+    enemyCar.style.left=enemyX+"px";
+
+    if(!multiplayer)
+        enemyCar.style.display="none";
+
+    requestAnimationFrame(gameLoop);
+}
+
+function gameLoop(){
+
+    if(!gameStarted)return;
+
+    updateMyCar();
+
+    if(multiplayer && connection && connection.open){
+
+        connection.send({
+            type:"position",
+            x:myX
+        });
     }
 
     requestAnimationFrame(gameLoop);
 }
 
-document.addEventListener("keydown", function(e) {
+function updateMyCar(){
 
-    if (!gameRunning) return;
+    const roadWidth=Math.min(420,window.innerWidth*.9);
+    const roadLeft=window.innerWidth/2-roadWidth/2;
+    const roadRight=window.innerWidth/2+roadWidth/2-48;
 
-    if (e.key === "ArrowLeft" || e.key === "a") {
-        playerX -= 20;
+    if(myX<roadLeft)myX=roadLeft;
+    if(myX>roadRight)myX=roadRight;
+
+    myCar.style.left=myX+"px";
+}
+
+function updateEnemy(){
+
+    enemyCar.style.left=enemyX+"px";
+}
+
+/* KEYBOARD */
+
+document.addEventListener("keydown",function(e){
+
+    if(!gameStarted)return;
+
+    if(e.key==="ArrowLeft" || e.key.toLowerCase()==="a"){
+        myX-=12;
     }
 
-    if (e.key === "ArrowRight" || e.key === "d") {
-        playerX += 20;
+    if(e.key==="ArrowRight" || e.key.toLowerCase()==="d"){
+        myX+=12;
     }
-
-    let roadLeft = window.innerWidth / 2 - 160;
-    let roadRight = window.innerWidth / 2 + 110;
-
-    if (playerX < roadLeft)
-        playerX = roadLeft;
-
-    if (playerX > roadRight)
-        playerX = roadRight;
-
-    player.style.left = playerX + "px";
 });
 
-start.addEventListener("click", startGame);
+/* MOBILE */
+
+document.getElementById("left").addEventListener("touchstart",function(e){
+    e.preventDefault();
+    myX-=20;
+});
+
+document.getElementById("right").addEventListener("touchstart",function(e){
+    e.preventDefault();
+    myX+=20;
+});
+
+document.getElementById("left").addEventListener("click",function(){
+    myX-=20;
+});
+
+document.getElementById("right").addEventListener("click",function(){
+    myX+=20;
+});
+
+/* FINISH */
+
+function endGame(text){
+
+    gameStarted=false;
+
+    document.getElementById("resultText").innerText=text;
+
+    document.getElementById("result").style.display="flex";
+}
+
+/* AUTO JOIN FROM LINK */
+
+window.addEventListener("load",function(){
+
+    const params=new URLSearchParams(location.search);
+
+    const room=params.get("room");
+
+    if(room){
+
+        document.getElementById("joinCode").value=room;
+
+        setTimeout(function(){
+            joinRoom();
+        },500);
+    }
+});
+
 </script>
 
 </body>
