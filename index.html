@@ -1,0 +1,185 @@
+<!DOCTYPE html>
+<html>
+<head>
+<title>Multiplayer Car Racing</title>
+<style>
+body {
+    margin: 0;
+    overflow: hidden;
+    background: #222;
+    font-family: Arial;
+}
+
+#game {
+    width: 100vw;
+    height: 100vh;
+    background: #555;
+    position: relative;
+    overflow: hidden;
+}
+
+.road {
+    position: absolute;
+    width: 320px;
+    height: 100%;
+    left: 50%;
+    transform: translateX(-50%);
+    background: #333;
+    border-left: 8px solid white;
+    border-right: 8px solid white;
+}
+
+.line {
+    position: absolute;
+    width: 8px;
+    height: 80px;
+    background: white;
+    left: 50%;
+    transform: translateX(-50%);
+}
+
+.car {
+    position: absolute;
+    width: 50px;
+    height: 90px;
+    border-radius: 12px;
+    bottom: 30px;
+}
+
+#player {
+    background: red;
+    left: calc(50% - 25px);
+}
+
+#enemy {
+    background: blue;
+    top: -100px;
+    left: calc(50% - 25px);
+}
+
+#score {
+    position: absolute;
+    top: 15px;
+    left: 15px;
+    color: white;
+    font-size: 25px;
+    z-index: 10;
+}
+
+#start {
+    position: absolute;
+    z-index: 20;
+    top: 50%;
+    left: 50%;
+    transform: translate(-50%, -50%);
+    padding: 15px 30px;
+    font-size: 22px;
+    border: none;
+    border-radius: 10px;
+    cursor: pointer;
+}
+</style>
+</head>
+
+<body>
+
+<div id="game">
+    <div class="road"></div>
+
+    <div id="score">Score: 0</div>
+
+    <div id="player" class="car"></div>
+    <div id="enemy" class="car"></div>
+
+    <button id="start">START GAME</button>
+</div>
+
+<script>
+const player = document.getElementById("player");
+const enemy = document.getElementById("enemy");
+const scoreText = document.getElementById("score");
+const start = document.getElementById("start");
+
+let playerX;
+let enemyY;
+let score;
+let gameRunning = false;
+
+function startGame() {
+    playerX = window.innerWidth / 2 - 25;
+    enemyY = -100;
+    score = 0;
+
+    player.style.left = playerX + "px";
+    enemy.style.top = enemyY + "px";
+
+    scoreText.innerText = "Score: 0";
+    start.style.display = "none";
+
+    gameRunning = true;
+    gameLoop();
+}
+
+function gameLoop() {
+    if (!gameRunning) return;
+
+    enemyY += 6;
+    enemy.style.top = enemyY + "px";
+
+    if (enemyY > window.innerHeight) {
+        enemyY = -100;
+        enemy.style.left =
+            (window.innerWidth / 2 - 160 +
+            Math.random() * 270) + "px";
+
+        score++;
+        scoreText.innerText = "Score: " + score;
+    }
+
+    let p = player.getBoundingClientRect();
+    let e = enemy.getBoundingClientRect();
+
+    if (
+        p.left < e.right &&
+        p.right > e.left &&
+        p.top < e.bottom &&
+        p.bottom > e.top
+    ) {
+        gameRunning = false;
+        start.innerText = "GAME OVER - PLAY AGAIN";
+        start.style.display = "block";
+        return;
+    }
+
+    requestAnimationFrame(gameLoop);
+}
+
+document.addEventListener("keydown", function(e) {
+
+    if (!gameRunning) return;
+
+    if (e.key === "ArrowLeft" || e.key === "a") {
+        playerX -= 20;
+    }
+
+    if (e.key === "ArrowRight" || e.key === "d") {
+        playerX += 20;
+    }
+
+    let roadLeft = window.innerWidth / 2 - 160;
+    let roadRight = window.innerWidth / 2 + 110;
+
+    if (playerX < roadLeft)
+        playerX = roadLeft;
+
+    if (playerX > roadRight)
+        playerX = roadRight;
+
+    player.style.left = playerX + "px";
+});
+
+start.addEventListener("click", startGame);
+</script>
+
+</body>
+</html>
