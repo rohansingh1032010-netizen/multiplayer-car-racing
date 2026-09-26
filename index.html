@@ -2,458 +2,466 @@
 <html lang="en">
 <head>
 <meta charset="UTF-8">
-<meta name="viewport" content="width=device-width,initial-scale=1.0">
-<title>Multiplayer Car Racing</title>
-
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Turbo Race</title>
 <script src="https://unpkg.com/peerjs@1.5.4/dist/peerjs.min.js"></script>
 
 <style>
 *{box-sizing:border-box}
 body{
-    margin:0;
-    font-family:Arial,sans-serif;
-    background:#111;
-    color:white;
-    overflow:hidden;
+ margin:0;background:#101218;color:white;font-family:Arial;
+ text-align:center;overflow:hidden
 }
-.screen{
-    width:100vw;
-    height:100vh;
-    display:flex;
-    align-items:center;
-    justify-content:center;
-    flex-direction:column;
-    gap:15px;
-}
-h1{font-size:36px;margin:0 0 15px}
-button,input{
-    padding:14px 20px;
-    border:0;
-    border-radius:10px;
-    font-size:18px;
-}
+h1{margin:10px 0;color:#00e5ff}
 button{
-    cursor:pointer;
-    font-weight:bold;
+ padding:14px 22px;margin:7px;border:0;border-radius:12px;
+ font-size:17px;font-weight:bold;cursor:pointer
 }
+.menu{margin-top:15vh}
+#game{display:none}
+canvas{
+ background:#222;display:block;margin:auto;
+ border:3px solid white;max-width:100vw;max-height:75vh
+}
+#info{font-size:18px;margin:6px}
+.controls{display:flex;justify-content:center;gap:20px}
+.controls button{
+ width:90px;height:60px;background:#333;color:white;font-size:28px
+}
+#roomBox{display:none;margin:15px}
 input{
-    width:260px;
-    text-align:center;
-}
-#roomCode{
-    font-size:24px;
-    font-weight:bold;
-    letter-spacing:3px;
-}
-#status{
-    min-height:25px;
-    color:#ffd54f;
-}
-#game{
-    display:none;
-    position:relative;
-    width:100vw;
-    height:100vh;
-    background:#176b2c;
-    overflow:hidden;
-}
-.road{
-    position:absolute;
-    left:50%;
-    transform:translateX(-50%);
-    width:min(420px,90vw);
-    height:100%;
-    background:#333;
-    border-left:8px solid white;
-    border-right:8px solid white;
-}
-.lane{
-    position:absolute;
-    left:50%;
-    width:7px;
-    height:70px;
-    background:white;
-    transform:translateX(-50%);
-}
-.car{
-    position:absolute;
-    width:48px;
-    height:78px;
-    border-radius:12px;
-    z-index:5;
-    box-shadow:0 5px 10px #0008;
-}
-#myCar{
-    background:#ff3030;
-    bottom:80px;
-}
-#enemyCar{
-    background:#2979ff;
-    bottom:200px;
-}
-#hud{
-    position:absolute;
-    top:10px;
-    left:10px;
-    right:10px;
-    z-index:10;
-    display:flex;
-    justify-content:space-between;
-    font-size:18px;
-    font-weight:bold;
-}
-#mobileControls{
-    position:absolute;
-    bottom:20px;
-    left:0;
-    right:0;
-    z-index:20;
-    display:flex;
-    justify-content:center;
-    gap:80px;
-}
-.control{
-    width:75px;
-    height:60px;
-    border-radius:50%;
-    font-size:28px;
-    opacity:.85;
+ padding:13px;border-radius:10px;border:0;font-size:17px;
+ width:170px;text-align:center
 }
 #result{
-    display:none;
-    position:absolute;
-    inset:0;
-    z-index:50;
-    background:#000b;
-    align-items:center;
-    justify-content:center;
-    flex-direction:column;
+ display:none;position:fixed;inset:0;background:rgba(0,0,0,.9);
+ align-items:center;justify-content:center;flex-direction:column;
+ z-index:10
 }
 </style>
 </head>
 
 <body>
 
-<div id="menu" class="screen">
-    <h1>🏎️ Car Racing</h1>
+<div id="menu" class="menu">
+<h1>🏎️ TURBO RACE</h1>
+<p>Race against AI or your friend!</p>
 
-    <button onclick="startSolo()">🎮 Play Solo</button>
+<button onclick="startSolo()">🏁 PLAY SOLO</button><br>
+<button onclick="createRoom()">👥 CREATE ROOM</button>
+<button onclick="showJoin()">🔗 JOIN ROOM</button>
 
-    <button onclick="createRoom()">👑 Create Room</button>
+<div id="roomBox">
+<input id="roomInput" placeholder="ROOM CODE">
+<br>
+<button onclick="joinRoom()">JOIN</button>
+</div>
 
-    <div id="roomCode"></div>
-
-    <input id="joinCode" placeholder="Enter Room Code">
-    <button onclick="joinRoom()">👥 Join Room</button>
-
-    <div id="status"></div>
+<p id="status"></p>
 </div>
 
 <div id="game">
+<h1>🏎️ TURBO RACE</h1>
+<div id="info">Lap 1/3</div>
+<canvas id="canvas" width="900" height="600"></canvas>
 
-    <div class="road"></div>
+<div class="controls">
+<button id="left">⬅️</button>
+<button id="right">➡️</button>
+</div>
+</div>
 
-    <div class="lane" style="top:0"></div>
-    <div class="lane" style="top:150px"></div>
-    <div class="lane" style="top:300px"></div>
-    <div class="lane" style="top:450px"></div>
-    <div class="lane" style="top:600px"></div>
-    <div class="lane" style="top:750px"></div>
-
-    <div id="hud">
-        <span>🏁 Lap: <span id="lap">1</span>/3</span>
-        <span>🏆 Score: <span id="score">0</span></span>
-    </div>
-
-    <div id="myCar" class="car"></div>
-    <div id="enemyCar" class="car"></div>
-
-    <div id="mobileControls">
-        <button class="control" id="left">⬅️</button>
-        <button class="control" id="right">➡️</button>
-    </div>
-
-    <div id="result">
-        <h1 id="resultText">🏆 YOU WIN!</h1>
-        <button onclick="location.reload()">Play Again</button>
-    </div>
+<div id="result">
+<h1 id="resultText">🏆 FINISH!</h1>
+<button onclick="location.reload()">PLAY AGAIN</button>
 </div>
 
 <script>
+const canvas=document.getElementById("canvas");
+const ctx=canvas.getContext("2d");
 
+let mode="solo";
 let peer=null;
-let connection=null;
-let isHost=false;
-let multiplayer=false;
+let conn=null;
+let otherPlayer=null;
 
-let myX=0;
-let enemyX=0;
+let keys={left:false,right:false};
 
-let score=0;
-let lap=1;
-let gameStarted=false;
+const track={
+ left:150,
+ right:750,
+ top:70,
+ bottom:530
+};
 
-const menu=document.getElementById("menu");
-const game=document.getElementById("game");
-const myCar=document.getElementById("myCar");
-const enemyCar=document.getElementById("enemyCar");
-const status=document.getElementById("status");
-const roomCode=document.getElementById("roomCode");
+const TOTAL_LAPS=3;
 
-function randomRoomCode(){
-    return Math.random().toString(36).substring(2,8).toUpperCase();
+let player={
+ x:450,y:470,
+ speed:0,
+ angle:0,
+ lap:1,
+ progress:0,
+ color:"#00e5ff"
+};
+
+let friend={
+ x:450,y:430,
+ speed:0,
+ angle:0,
+ lap:1,
+ progress:0,
+ color:"#ff4081"
+};
+
+let ais=[];
+
+function makeAI(x,y,color){
+ return {
+  x,y,color,
+  speed:2.2+Math.random()*0.8,
+  progress:0,
+  lap:1,
+  angle:0
+ };
 }
 
-/* SOLO */
+function setupAI(n){
+ ais=[];
+ const colors=["#ffcc00","#ff5722","#9c27b0","#4caf50","#ffffff"];
+ for(let i=0;i<n;i++){
+  ais.push(makeAI(
+   250+i*100,
+   390-i*15,
+   colors[i]
+  ));
+ }
+}
 
 function startSolo(){
-    multiplayer=false;
-    enemyCar.style.display="none";
-    startGame();
+ mode="solo";
+ setupAI(4);
+ startGame();
 }
 
-/* CREATE ROOM */
+function showJoin(){
+ document.getElementById("roomBox").style.display="block";
+}
 
 function createRoom(){
+ mode="host";
+ document.getElementById("status").innerText="Creating room...";
 
-    status.innerText="Creating room...";
+ peer=new Peer();
 
-    const code=randomRoomCode();
+ peer.on("open",id=>{
+  const code=id.slice(0,6).toUpperCase();
+  document.getElementById("status").innerText=
+   "ROOM CODE: "+code+"  | Send your link to friend";
 
-    peer=new Peer("car-race-"+code);
+  const link=location.href.split("?")[0]+"?room="+id;
+  navigator.clipboard?.writeText(link);
 
-    peer.on("open",function(){
+  setupAI(3);
+  startGame();
+ });
 
-        isHost=true;
-        multiplayer=true;
-
-        roomCode.innerText="ROOM: "+code;
-
-        const link=location.origin+location.pathname+"?room="+code;
-
-        status.innerText="Room created! Share this link with your friend.";
-
-        navigator.clipboard.writeText(link).catch(()=>{});
-
-        roomCode.innerHTML=
-            "ROOM: "+code+
-            "<br><small>Link copied! Send it to your friend.</small>";
-    });
-
-    peer.on("connection",function(conn){
-
-        connection=conn;
-
-        connection.on("open",function(){
-
-            status.innerText="🎉 Friend connected! Starting race...";
-
-            connection.send({
-                type:"start",
-                x:myX
-            });
-
-            setTimeout(startGame,1000);
-        });
-
-        connection.on("data",receiveData);
-    });
-
-    peer.on("error",function(err){
-        status.innerText="Connection error. Try creating the room again.";
-        console.log(err);
-    });
+ peer.on("connection",c=>{
+  conn=c;
+  setupConnection();
+ });
 }
-
-/* JOIN ROOM */
 
 function joinRoom(){
+ const code=document.getElementById("roomInput").value.trim();
 
-    let code=document.getElementById("joinCode").value.trim().toUpperCase();
+ if(!code){
+  alert("Room code daal bhai!");
+  return;
+ }
 
-    if(!code){
-        status.innerText="Enter a room code.";
-        return;
-    }
+ mode="client";
+ peer=new Peer();
 
-    status.innerText="Joining room...";
-
-    peer=new Peer();
-
-    peer.on("open",function(){
-
-        connection=peer.connect("car-race-"+code);
-
-        connection.on("open",function(){
-
-            multiplayer=true;
-            isHost=false;
-
-            status.innerText="🎉 Connected! Starting race...";
-
-            connection.send({
-                type:"start",
-                x:myX
-            });
-
-            setTimeout(startGame,1000);
-        });
-
-        connection.on("data",receiveData);
-
-        connection.on("error",function(){
-            status.innerText="Could not join the room.";
-        });
-    });
+ peer.on("open",()=>{
+  conn=peer.connect(code);
+  setupConnection();
+  setupAI(3);
+  startGame();
+ });
 }
 
-/* RECEIVE */
+function setupConnection(){
 
-function receiveData(data){
+ conn.on("open",()=>{
+  document.getElementById("status").innerText="Connected to friend! 🔥";
+ });
 
-    if(data.type==="position"){
-        enemyX=data.x;
-        updateEnemy();
-    }
-
-    if(data.type==="start"){
-        multiplayer=true;
-        if(!gameStarted) startGame();
-    }
-
-    if(data.type==="score"){
-        score=data.score;
-        lap=data.lap;
-    }
-
-    if(data.type==="finish"){
-        endGame(data.winner ? "🏆 YOU WIN!" : "😅 YOU LOST!");
-    }
+ conn.on("data",data=>{
+  if(data.type==="player"){
+   friend=data.player;
+  }
+ });
 }
 
-/* GAME */
+function sendPlayer(){
+ if(conn && conn.open){
+  conn.send({
+   type:"player",
+   player:{
+    x:player.x,
+    y:player.y,
+    lap:player.lap,
+    progress:player.progress
+   }
+  });
+ }
+}
 
 function startGame(){
 
-    if(gameStarted)return;
+ document.getElementById("menu").style.display="none";
+ document.getElementById("game").style.display="block";
 
-    gameStarted=true;
-
-    menu.style.display="none";
-    game.style.display="block";
-
-    const center=window.innerWidth/2;
-
-    myX=center-100;
-    enemyX=center+50;
-
-    myCar.style.left=myX+"px";
-    enemyCar.style.left=enemyX+"px";
-
-    if(!multiplayer)
-        enemyCar.style.display="none";
-
-    requestAnimationFrame(gameLoop);
+ countdown();
 }
 
-function gameLoop(){
+function countdown(){
 
-    if(!gameStarted)return;
+ let n=3;
+ const info=document.getElementById("info");
 
-    updateMyCar();
-
-    if(multiplayer && connection && connection.open){
-
-        connection.send({
-            type:"position",
-            x:myX
-        });
-    }
-
-    requestAnimationFrame(gameLoop);
+ const timer=setInterval(()=>{
+  if(n>0){
+   info.innerText=n;
+   n--;
+  }else{
+   info.innerText="GO! 🏁";
+   clearInterval(timer);
+  }
+ },700);
 }
 
-function updateMyCar(){
+function drawTrack(){
 
-    const roadWidth=Math.min(420,window.innerWidth*.9);
-    const roadLeft=window.innerWidth/2-roadWidth/2;
-    const roadRight=window.innerWidth/2+roadWidth/2-48;
+ ctx.fillStyle="#222";
+ ctx.fillRect(0,0,canvas.width,canvas.height);
 
-    if(myX<roadLeft)myX=roadLeft;
-    if(myX>roadRight)myX=roadRight;
+ // grass
+ ctx.fillStyle="#155c2b";
+ ctx.fillRect(0,0,canvas.width,canvas.height);
 
-    myCar.style.left=myX+"px";
+ // road
+ ctx.fillStyle="#444";
+ ctx.fillRect(track.left,track.top,
+  track.right-track.left,
+  track.bottom-track.top);
+
+ // road borders
+ ctx.strokeStyle="white";
+ ctx.lineWidth=8;
+ ctx.strokeRect(track.left,track.top,
+  track.right-track.left,
+  track.bottom-track.top);
+
+ // centre dashed line
+ ctx.strokeStyle="#ddd";
+ ctx.lineWidth=4;
+ ctx.setLineDash([25,25]);
+
+ ctx.beginPath();
+ ctx.moveTo(450,track.top);
+ ctx.lineTo(450,track.bottom);
+ ctx.stroke();
+
+ ctx.setLineDash([]);
+
+ // finish line
+ ctx.fillStyle="white";
+ for(let i=0;i<10;i++){
+  ctx.fillRect(430+(i%2)*20,track.bottom-15,
+   20,8);
+ }
 }
 
-function updateEnemy(){
+function drawCar(car,label){
 
-    enemyCar.style.left=enemyX+"px";
+ ctx.save();
+ ctx.translate(car.x,car.y);
+
+ ctx.fillStyle=car.color;
+ ctx.fillRect(-15,-25,30,50);
+
+ ctx.fillStyle="#111";
+ ctx.fillRect(-11,-17,22,13);
+
+ ctx.fillStyle="#111";
+ ctx.fillRect(-18,-18,5,12);
+ ctx.fillRect(13,-18,5,12);
+ ctx.fillRect(-18,8,5,12);
+ ctx.fillRect(13,8,5,12);
+
+ ctx.restore();
+
+ if(label){
+  ctx.fillStyle="white";
+  ctx.font="13px Arial";
+  ctx.fillText(label,car.x-15,car.y-32);
+ }
 }
 
-/* KEYBOARD */
+function updatePlayer(){
 
-document.addEventListener("keydown",function(e){
+ if(keys.left) player.x-=4;
+ if(keys.right) player.x+=4;
 
-    if(!gameStarted)return;
+ player.x=Math.max(track.left+25,
+  Math.min(track.right-25,player.x));
 
-    if(e.key==="ArrowLeft" || e.key.toLowerCase()==="a"){
-        myX-=12;
-    }
+ player.y-=1.8;
 
-    if(e.key==="ArrowRight" || e.key.toLowerCase()==="d"){
-        myX+=12;
-    }
-});
+ if(player.y<track.top+20){
+  player.y=track.bottom-30;
+  player.lap++;
 
-/* MOBILE */
+  if(player.lap>TOTAL_LAPS){
+   finish("🏆 YOU WIN!");
+  }
+ }
 
-document.getElementById("left").addEventListener("touchstart",function(e){
-    e.preventDefault();
-    myX-=20;
-});
-
-document.getElementById("right").addEventListener("touchstart",function(e){
-    e.preventDefault();
-    myX+=20;
-});
-
-document.getElementById("left").addEventListener("click",function(){
-    myX-=20;
-});
-
-document.getElementById("right").addEventListener("click",function(){
-    myX+=20;
-});
-
-/* FINISH */
-
-function endGame(text){
-
-    gameStarted=false;
-
-    document.getElementById("resultText").innerText=text;
-
-    document.getElementById("result").style.display="flex";
+ player.progress=(TOTAL_LAPS-player.lap)*600+
+  player.y;
 }
 
-/* AUTO JOIN FROM LINK */
+function updateFriend(){
 
-window.addEventListener("load",function(){
+ if(!otherPlayer)return;
 
-    const params=new URLSearchParams(location.search);
+ friend.x += (otherPlayer.x-friend.x)*0.15;
+ friend.y += (otherPlayer.y-friend.y)*0.15;
+ friend.lap=otherPlayer.lap;
+}
 
-    const room=params.get("room");
+function updateAI(ai){
 
-    if(room){
+ ai.y-=ai.speed;
 
-        document.getElementById("joinCode").value=room;
+ // small random steering
+ ai.x += Math.sin(Date.now()/700+ai.x)*0.8;
 
-        setTimeout(function(){
-            joinRoom();
-        },500);
-    }
+ ai.x=Math.max(track.left+25,
+  Math.min(track.right-25,ai.x));
+
+ if(ai.y<track.top+20){
+  ai.y=track.bottom-30;
+  ai.lap++;
+
+  if(ai.lap>TOTAL_LAPS){
+   ai.lap=TOTAL_LAPS+1;
+  }
+ }
+
+ ai.progress=(TOTAL_LAPS-ai.lap)*600+ai.y;
+}
+
+function collision(a,b){
+
+ return Math.abs(a.x-b.x)<28 &&
+        Math.abs(a.y-b.y)<45;
+}
+
+function checkCollisions(){
+
+ for(const ai of ais){
+
+  if(collision(player,ai)){
+   if(player.x<ai.x) player.x-=5;
+   else player.x+=5;
+  }
+ }
+
+ if(mode!=="solo" && collision(player,friend)){
+  if(player.x<friend.x) player.x-=5;
+  else player.x+=5;
+ }
+}
+
+function update(){
+
+ updatePlayer();
+
+ for(const ai of ais)
+  updateAI(ai);
+
+ updateFriend();
+
+ checkCollisions();
+
+ sendPlayer();
+
+ document.getElementById("info").innerText=
+  "Lap "+Math.min(player.lap,TOTAL_LAPS)+"/"+TOTAL_LAPS+
+  "   |   AI: "+ais.length;
+}
+
+function draw(){
+
+ drawTrack();
+
+ for(let i=0;i<ais.length;i++)
+  drawCar(ais[i],"AI "+(i+1));
+
+ if(mode!=="solo")
+  drawCar(friend,"FRIEND");
+
+ drawCar(player,"YOU");
+}
+
+function loop(){
+
+ update();
+ draw();
+
+ requestAnimationFrame(loop);
+}
+
+function finish(text){
+
+ document.getElementById("result").style.display="flex";
+ document.getElementById("resultText").innerText=text;
+}
+
+document.getElementById("left").ontouchstart=
+document.getElementById("left").onmousedown=()=>{
+ keys.left=true;
+};
+
+document.getElementById("left").ontouchend=
+document.getElementById("left").onmouseup=()=>{
+ keys.left=false;
+};
+
+document.getElementById("right").ontouchstart=
+document.getElementById("right").onmousedown=()=>{
+ keys.right=true;
+};
+
+document.getElementById("right").ontouchend=
+document.getElementById("right").onmouseup=()=>{
+ keys.right=false;
+};
+
+document.addEventListener("keydown",e=>{
+ if(e.key==="ArrowLeft")keys.left=true;
+ if(e.key==="ArrowRight")keys.right=true;
 });
 
+document.addEventListener("keyup",e=>{
+ if(e.key==="ArrowLeft")keys.left=false;
+ if(e.key==="ArrowRight")keys.right=false;
+});
+
+loop();
 </script>
 
 </body>
