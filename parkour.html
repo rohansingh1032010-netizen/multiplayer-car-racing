@@ -1,1 +1,721 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width,initial-scale=1.0,user-scalable=no">
+<title>Neon Parkour - City Escape</title>
+<style>
+*{box-sizing:border-box;margin:0;padding:0}
+html,body{
+  width:100%;height:100%;overflow:hidden;
+  background:#050817;font-family:Arial,sans-serif;
+  touch-action:none;
+}
+canvas{display:block;width:100%;height:100%}
 
+#ui{
+ position:fixed;top:15px;left:15px;right:15px;
+ display:flex;justify-content:space-between;
+ color:white;font-weight:bold;z-index:5;
+ text-shadow:0 0 10px #00eaff;
+ pointer-events:none;
+}
+.panel{
+ background:rgba(3,8,25,.65);
+ border:1px solid #00eaff;
+ border-radius:12px;padding:8px 13px;
+ box-shadow:0 0 15px rgba(0,220,255,.25);
+}
+#menu{
+ position:fixed;inset:0;z-index:10;
+ display:flex;align-items:center;justify-content:center;
+ background:radial-gradient(circle,#111d46,#030611 70%);
+ color:white;text-align:center;
+}
+.box{
+ width:min(90%,500px);padding:35px 25px;
+ border:1px solid #00eaff;border-radius:25px;
+ background:rgba(5,10,30,.82);
+ box-shadow:0 0 40px rgba(0,220,255,.25);
+}
+h1{
+ font-size:clamp(38px,9vw,72px);
+ color:#00eaff;
+ text-shadow:0 0 10px #00eaff,0 0 35px #008cff;
+}
+.sub{margin:8px 0 25px;color:#b8dfff}
+button{
+ border:0;border-radius:14px;padding:15px 28px;
+ font-size:18px;font-weight:bold;
+ background:linear-gradient(90deg,#00eaff,#8b2cff);
+ color:white;cursor:pointer;
+ box-shadow:0 0 20px rgba(0,220,255,.35);
+}
+#controls{
+ position:fixed;bottom:25px;left:0;right:0;
+ display:flex;justify-content:center;gap:20px;z-index:6;
+}
+.ctrl{
+ width:72px;height:72px;border-radius:50%;
+ background:rgba(10,20,50,.7);
+ border:2px solid #00eaff;color:white;
+ font-size:27px;
+ box-shadow:0 0 18px rgba(0,220,255,.3);
+}
+#hint{
+ position:fixed;bottom:8px;left:0;right:0;
+ text-align:center;color:#9fcfff;font-size:12px;
+ pointer-events:none;
+}
+.hidden{display:none!important}
+</style>
+</head>
+<body>
+
+<canvas id="game"></canvas>
+
+<div id="ui" class="hidden">
+ <div class="panel">DISTANCE: <span id="score">0</span>m</div>
+ <div class="panel">⚡ ENERGY: <span id="energy">100</span>%</div>
+</div>
+
+<div id="controls" class="hidden">
+ <button class="ctrl" id="left">◀</button>
+ <button class="ctrl" id="jump">▲</button>
+ <button class="ctrl" id="dash">⚡</button>
+ <button class="ctrl" id="right">▶</button>
+</div>
+
+<div id="hint" class="hidden">A/D or ◀ ▶ = Move • SPACE/▲ = Jump • SHIFT/⚡ = Dash</div>
+
+<div id="menu">
+ <div class="box">
+  <h1>NEON<br>PARKOUR</h1>
+  <div class="sub">CITY ESCAPE</div>
+  <p style="line-height:1.6;margin-bottom:25px">
+   Run through the futuristic city.<br>
+   Jump rooftops • Dodge drones • Collect energy
+  </p>
+  <button id="start">START RUN</button>
+ </div>
+</div>
+
+<script>
+const canvas=document.getElementById("game");
+const ctx=canvas.getContext("2d");
+
+let W,H,DPR;
+function resize(){
+ W=innerWidth;H=innerHeight;
+ DPR=Math.min(devicePixelRatio||1,2);
+ canvas.width=W*DPR;
+ canvas.height=H*DPR;
+ ctx.setTransform(DPR,0,0,DPR,0,0);
+}
+addEventListener("resize",resize);
+resize();
+
+let running=false;
+let last=0;
+let distance=0;
+let energy=100;
+let speed=7;
+let world=0;
+let shake=0;
+let flash=0;
+
+const keys={left:false,right:false,jump:false,dash:false};
+
+const player={
+ x:.5,y:0,vy:0,
+ w:32,h:58,
+ grounded:true,
+ jumpLock:false,
+ dashTime:0
+};
+
+let buildings=[];
+let obstacles=[];
+let particles=[];
+let stars=[];
+
+function rand(a,b){return a+Math.random()*(b-a)}
+
+for(let i=0;i<90;i++){
+ stars.push({
+  x:Math.random(),y:Math.random()*.65,
+  s:rand(.5,2.2),a:rand(.3,1)
+ });
+}
+
+function reset(){
+ distance=0;
+ energy=100;
+ speed=7;
+ world=0;
+ shake=0;
+ flash=0;
+ player.x=.5;
+ player.y=0;
+ player.vy=0;
+ player.grounded=true;
+ player.dashTime=0;
+ buildings=[];
+ obstacles=[];
+ particles=[];
+ generateWorld();
+}
+
+function generateWorld(){
+ buildings=[];
+ obstacles=[];
+
+ let x=-300;
+
+ while(x<W+900){
+   let bw=rand(100,220);
+   let bh=rand(H*.25,H*.65);
+
+   buildings.push({
+    x:x,
+    w:bw,
+    h:bh,
+    neon:Math.random()>.45,
+    seed:Math.random()
+   });
+
+   if(Math.random()>.3){
+    obstacles.push({
+     x:x+bw*.55,
+     y:0,
+     type:Math.random()>.5?"drone":"barrier",
+     hit:false,
+     phase:Math.random()*10
+    });
+   }
+
+   x+=bw+rand(20,70);
+ }
+}
+
+function addParticle(x,y,color="#00eaff",count=12){
+ for(let i=0;i<count;i++){
+  particles.push({
+   x,y,
+   vx:rand(-4,4),
+   vy:rand(-5,2),
+   life:rand(.3,.8),
+   max:.8,
+   size:rand(2,6),
+   color
+  });
+ }
+}
+
+function updateParticles(dt){
+ for(let i=particles.length-1;i>=0;i--){
+  let p=particles[i];
+  p.x+=p.vx*60*dt;
+  p.y+=p.vy*60*dt;
+  p.vy+=.15;
+  p.life-=dt;
+  if(p.life<=0)particles.splice(i,1);
+ }
+}
+
+function jump(){
+ if(!running)return;
+
+ if(player.grounded){
+  player.vy=-15;
+  player.grounded=false;
+  addParticle(W*player.x,H*.76, "#ffffff",18);
+ }
+}
+
+function dash(){
+ if(!running || energy<20)return;
+
+ energy-=20;
+ player.dashTime=.35;
+ speed+=4;
+ addParticle(W*player.x,H*.65,"#8b2cff",25);
+ shake=8;
+}
+
+function move(dt){
+ if(keys.left)player.x-=.75*dt;
+ if(keys.right)player.x+=.75*dt;
+
+ player.x=Math.max(.12,Math.min(.88,player.x));
+
+ if(!player.grounded){
+  player.vy+=32*dt;
+  player.y+=player.vy*dt;
+
+  if(player.y>=0){
+   player.y=0;
+   player.vy=0;
+   player.grounded=true;
+   addParticle(W*player.x,H*.76,"#00eaff",10);
+  }
+ }
+
+ if(player.dashTime>0){
+  player.dashTime-=dt;
+  if(player.dashTime<=0)speed=Math.max(7,speed-4);
+ }
+}
+
+function updateWorld(dt){
+ world+=speed*60*dt;
+ distance+=speed*dt*4;
+
+ speed=Math.min(15,7+distance/500);
+
+ for(let b of buildings)b.x-=speed*60*dt;
+ for(let o of obstacles){
+  o.x-=speed*60*dt;
+  o.phase+=dt*5;
+ }
+
+ if(buildings.length && buildings[0].x+buildings[0].w< -300){
+  buildings.shift();
+  let lastB=buildings[buildings.length-1];
+  let bw=rand(100,220);
+  buildings.push({
+   x:lastB.x+lastB.w+rand(20,70),
+   w:bw,
+   h:rand(H*.25,H*.65),
+   neon:Math.random()>.45,
+   seed:Math.random()
+  });
+ }
+
+ obstacles=obstacles.filter(o=>o.x>-300);
+
+ if(Math.random()<.018){
+  let lastB=buildings[buildings.length-1];
+  obstacles.push({
+   x:lastB.x+lastB.w*.6,
+   y:0,
+   type:Math.random()>.5?"drone":"barrier",
+   hit:false,
+   phase:Math.random()*10
+  });
+ }
+}
+
+function collision(){
+ let px=W*player.x;
+ let py=H*.76-player.y*35;
+
+ for(let o of obstacles){
+  let ox=o.x;
+  let oy=H*.72;
+
+  if(o.type==="drone"){
+   oy=H*.48+Math.sin(o.phase)*25;
+
+   let dx=Math.abs(px-ox);
+   let dy=Math.abs(py-oy);
+
+   if(dx<38 && dy<38 && !o.hit){
+    o.hit=true;
+    hit();
+   }
+  }else{
+   let dx=Math.abs(px-ox);
+   let dy=Math.abs(py-oy);
+
+   if(dx<35 && dy<35 && player.grounded && !o.hit){
+    o.hit=true;
+    hit();
+   }
+  }
+ }
+}
+
+function hit(){
+ energy-=25;
+ shake=16;
+ flash=.15;
+ addParticle(W*player.x,H*.65,"#ff2d55",30);
+
+ if(energy<=0){
+  energy=0;
+  gameOver();
+ }
+}
+
+function gameOver(){
+ running=false;
+ document.getElementById("menu").classList.remove("hidden");
+
+ document.querySelector(".box").innerHTML=`
+ <h1 style="font-size:50px;color:#ff3b68">RUN OVER</h1>
+ <div class="sub">You escaped <b>${Math.floor(distance)}m</b></div>
+ <p style="margin:20px 0;color:#b8dfff">
+   The city caught you this time.<br>
+   Can you beat your distance?
+ </p>
+ <button id="restart">RUN AGAIN</button>
+ `;
+
+ document.getElementById("restart").onclick=()=>{
+  document.querySelector(".box").innerHTML=`
+   <h1>NEON<br>PARKOUR</h1>
+   <div class="sub">CITY ESCAPE</div>
+   <p style="line-height:1.6;margin-bottom:25px">
+    Run through the futuristic city.<br>
+    Jump rooftops • Dodge drones • Collect energy
+   </p>
+   <button id="start2">START RUN</button>
+  `;
+  document.getElementById("start2").onclick=startGame;
+ };
+}
+
+function drawSky(){
+ let g=ctx.createLinearGradient(0,0,0,H);
+ g.addColorStop(0,"#03051b");
+ g.addColorStop(.55,"#10134a");
+ g.addColorStop(1,"#24104c");
+ ctx.fillStyle=g;
+ ctx.fillRect(0,0,W,H);
+
+ for(let s of stars){
+  ctx.globalAlpha=s.a;
+  ctx.fillStyle="#fff";
+  ctx.beginPath();
+  ctx.arc(s.x*W,s.y*H,s.s,0,Math.PI*2);
+  ctx.fill();
+ }
+ ctx.globalAlpha=1;
+
+ let mx=W*.78,my=H*.2;
+ let rg=ctx.createRadialGradient(mx,my,10,mx,my,100);
+ rg.addColorStop(0,"rgba(0,230,255,.35)");
+ rg.addColorStop(1,"transparent");
+ ctx.fillStyle=rg;
+ ctx.fillRect(mx-100,my-100,200,200);
+}
+
+function drawBuildings(){
+ let ground=H*.76;
+
+ for(let b of buildings){
+  let y=ground-b.h;
+
+  let grad=ctx.createLinearGradient(b.x,y,b.x,ground);
+  grad.addColorStop(0,"#111b46");
+  grad.addColorStop(1,"#05091c");
+
+  ctx.fillStyle=grad;
+  ctx.fillRect(b.x,y,b.w,b.h);
+
+  ctx.strokeStyle=b.neon?"rgba(0,220,255,.5)":"rgba(100,120,180,.25)";
+  ctx.strokeRect(b.x,y,b.w,b.h);
+
+  let cols=Math.max(2,Math.floor(b.w/35));
+  let rows=Math.max(3,Math.floor(b.h/40));
+
+  for(let c=0;c<cols;c++){
+   for(let r=0;r<rows;r++){
+    if(((c+r+Math.floor(b.seed*5))%3)!==0){
+     ctx.fillStyle=(r+c)%4===0?"#00eaff":"#52648e";
+     ctx.globalAlpha=.45;
+     ctx.fillRect(
+      b.x+10+c*((b.w-20)/cols),
+      y+15+r*((b.h-25)/rows),
+      9,5
+     );
+    }
+   }
+  }
+
+  ctx.globalAlpha=1;
+ }
+}
+
+function drawRoad(){
+ let ground=H*.76;
+
+ ctx.fillStyle="#060812";
+ ctx.fillRect(0,ground,W,H-ground);
+
+ for(let i=0;i<20;i++){
+  let x=(i*90-world*.6)% (W+100)-50;
+  ctx.fillStyle=i%2?"#00eaff":"#8b2cff";
+  ctx.globalAlpha=.55;
+  ctx.fillRect(x,ground+25,45,3);
+ }
+ ctx.globalAlpha=1;
+
+ ctx.strokeStyle="#00eaff";
+ ctx.lineWidth=2;
+ ctx.shadowBlur=12;
+ ctx.shadowColor="#00eaff";
+ ctx.beginPath();
+ ctx.moveTo(0,ground);
+ ctx.lineTo(W,ground);
+ ctx.stroke();
+ ctx.shadowBlur=0;
+}
+
+function drawObstacle(o){
+ let oy;
+
+ if(o.type==="drone"){
+  oy=H*.48+Math.sin(o.phase)*25;
+
+  ctx.save();
+  ctx.translate(o.x,oy);
+
+  ctx.shadowBlur=20;
+  ctx.shadowColor="#ff2d9a";
+  ctx.fillStyle="#181b45";
+  ctx.strokeStyle="#ff2d9a";
+  ctx.lineWidth=2;
+
+  ctx.beginPath();
+  ctx.roundRect(-28,-10,56,20,8);
+  ctx.fill();
+  ctx.stroke();
+
+  ctx.fillStyle="#00eaff";
+  ctx.fillRect(-12,-4,24,4);
+
+  ctx.fillStyle="#ff2d9a";
+  ctx.beginPath();
+  ctx.arc(-32,0,5,0,Math.PI*2);
+  ctx.arc(32,0,5,0,Math.PI*2);
+  ctx.fill();
+
+  ctx.restore();
+ }else{
+  let y=H*.72;
+
+  ctx.save();
+  ctx.translate(o.x,y);
+  ctx.shadowBlur=15;
+  ctx.shadowColor="#ff315f";
+  ctx.fillStyle="#25102d";
+  ctx.strokeStyle="#ff315f";
+
+  ctx.beginPath();
+  ctx.roundRect(-25,-25,50,25,6);
+  ctx.fill();
+  ctx.stroke();
+
+  ctx.fillStyle="#ff315f";
+  ctx.fillRect(-20,-20,40,4);
+
+  ctx.restore();
+ }
+}
+
+function drawPlayer(){
+ let px=W*player.x;
+ let py=H*.76-player.y*35;
+
+ ctx.save();
+ ctx.translate(px,py);
+
+ let glow=player.dashTime>0?35:18;
+ ctx.shadowBlur=glow;
+ ctx.shadowColor="#00eaff";
+
+ // legs
+ ctx.strokeStyle="#d8faff";
+ ctx.lineWidth=7;
+ ctx.lineCap="round";
+
+ let run=Math.sin(world*.08)*10;
+
+ ctx.beginPath();
+ ctx.moveTo(-5,15);
+ ctx.lineTo(-12+run,40);
+ ctx.stroke();
+
+ ctx.beginPath();
+ ctx.moveTo(5,15);
+ ctx.lineTo(13-run,40);
+ ctx.stroke();
+
+ // body
+ ctx.fillStyle="#0b1634";
+ ctx.strokeStyle="#00eaff";
+ ctx.lineWidth=2;
+
+ ctx.beginPath();
+ ctx.roundRect(-14,-35,28,48,9);
+ ctx.fill();
+ ctx.stroke();
+
+ // jacket stripe
+ ctx.fillStyle="#8b2cff";
+ ctx.fillRect(-11,-8,22,5);
+
+ // head
+ ctx.fillStyle="#d9faff";
+ ctx.beginPath();
+ ctx.arc(0,-47,13,0,Math.PI*2);
+ ctx.fill();
+
+ // visor
+ ctx.fillStyle="#07152c";
+ ctx.fillRect(-11,-51,22,7);
+
+ ctx.strokeStyle="#00eaff";
+ ctx.strokeRect(-10,-50,20,5);
+
+ // arms
+ ctx.strokeStyle="#d8faff";
+ ctx.lineWidth=6;
+
+ ctx.beginPath();
+ ctx.moveTo(-12,-25);
+ ctx.lineTo(-22+run,-5);
+ ctx.stroke();
+
+ ctx.beginPath();
+ ctx.moveTo(12,-25);
+ ctx.lineTo(22-run,-5);
+ ctx.stroke();
+
+ if(player.dashTime>0){
+  ctx.strokeStyle="#8b2cff";
+  ctx.lineWidth=4;
+  ctx.beginPath();
+  ctx.moveTo(0,25);
+  ctx.lineTo(-25,55);
+  ctx.moveTo(0,25);
+  ctx.lineTo(25,55);
+  ctx.stroke();
+ }
+
+ ctx.restore();
+}
+
+function drawParticles(){
+ for(let p of particles){
+  ctx.globalAlpha=Math.max(0,p.life/p.max);
+  ctx.fillStyle=p.color;
+  ctx.beginPath();
+  ctx.arc(p.x,p.y,p.size,0,Math.PI*2);
+  ctx.fill();
+ }
+ ctx.globalAlpha=1;
+}
+
+function draw(){
+ drawSky();
+ drawBuildings();
+ drawRoad();
+
+ for(let o of obstacles)drawObstacle(o);
+
+ drawPlayer();
+ drawParticles();
+
+ if(flash>0){
+  ctx.fillStyle=`rgba(255,40,80,${flash*2})`;
+  ctx.fillRect(0,0,W,H);
+ }
+
+ if(shake>0){
+  // visual handled through flash/particles
+ }
+}
+
+function loop(t){
+ if(!running)return;
+
+ let dt=Math.min((t-last)/1000,.033);
+ last=t;
+
+ move(dt);
+ updateWorld(dt);
+ updateParticles(dt);
+ collision();
+
+ energy=Math.min(100,energy+dt*2);
+
+ document.getElementById("score").textContent=Math.floor(distance);
+ document.getElementById("energy").textContent=Math.floor(energy);
+
+ if(flash>0)flash-=dt;
+ if(shake>0)shake-=dt*35;
+
+ draw();
+ requestAnimationFrame(loop);
+}
+
+function startGame(){
+ document.getElementById("menu").classList.add("hidden");
+ document.getElementById("ui").classList.remove("hidden");
+ document.getElementById("controls").classList.remove("hidden");
+ document.getElementById("hint").classList.remove("hidden");
+
+ reset();
+ running=true;
+ last=performance.now();
+ requestAnimationFrame(loop);
+}
+
+document.getElementById("start").onclick=startGame;
+
+addEventListener("keydown",e=>{
+ if(e.key==="ArrowLeft"||e.key.toLowerCase()==="a")keys.left=true;
+ if(e.key==="ArrowRight"||e.key.toLowerCase()==="d")keys.right=true;
+
+ if(e.key===" "||e.key==="ArrowUp"){
+  if(!keys.jump)jump();
+  keys.jump=true;
+ }
+
+ if(e.key==="Shift"){
+  if(!keys.dash)dash();
+  keys.dash=true;
+ });
+
+addEventListener("keyup",e=>{
+ if(e.key==="ArrowLeft"||e.key.toLowerCase()==="a")keys.left=false;
+ if(e.key==="ArrowRight"||e.key.toLowerCase()==="d")keys.right=false;
+ if(e.key===" "||e.key==="ArrowUp")keys.jump=false;
+ if(e.key==="Shift")keys.dash=false;
+});
+
+function hold(id,key){
+ const el=document.getElementById(id);
+
+ ["pointerdown","touchstart"].forEach(ev=>{
+  el.addEventListener(ev,e=>{
+   e.preventDefault();
+   keys[key]=true;
+  });
+ });
+
+ ["pointerup","pointercancel","touchend"].forEach(ev=>{
+  el.addEventListener(ev,e=>{
+   e.preventDefault();
+   keys[key]=false;
+  });
+ });
+}
+
+hold("left","left");
+hold("right","right");
+
+document.getElementById("jump").addEventListener("pointerdown",e=>{
+ e.preventDefault();jump();
+});
+
+document.getElementById("dash").addEventListener("pointerdown",e=>{
+ e.preventDefault();dash();
+});
+</script>
+
+</body>
+</html>
